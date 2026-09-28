@@ -1,0 +1,60 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CartCompare Personal</title>
+<style>
+:root{--navy:#164e70;--green:#58a936;--ink:#14221c;--muted:#6d7c75;--line:#e1e8e3;--bg:#f4f7f5}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:13px 16px;z-index:5}
+.logo{font-size:22px;font-weight:900;color:var(--navy)}.logo span{color:var(--green)}.small{font-size:11px;color:var(--muted);line-height:1.4}
+main{padding:15px 15px 90px}h1{font-size:27px;margin:4px 0}.card{background:#fff;border:1px solid var(--line);border-radius:17px;padding:14px;margin:10px 0}
+.hero{background:linear-gradient(135deg,var(--navy),#24799d 55%,var(--green));color:#fff;border-radius:20px;padding:17px;margin:12px 0}
+.hero .small{color:#eef}.big{font-size:30px;font-weight:900}.row{display:flex;justify-content:space-between;align-items:center;gap:8px}.grow{flex:1}
+.btn{border:0;border-radius:11px;background:var(--green);color:#fff;font-weight:800;padding:10px 12px}.ghost{background:#edf2ef;color:#234335}
+.link{border:0;background:none;color:var(--navy);font-weight:800;padding:4px 0}.danger{color:#b33}
+.search{display:flex;gap:7px}.search input{flex:1;border:1px solid var(--line);border-radius:10px;padding:11px}.item{display:flex;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border:0}.emoji{width:42px;height:42px;border-radius:11px;background:#eef2ef;display:grid;place-items:center;font-size:21px}.price{font-weight:900}.best{color:#16834a}
+.note{background:#fff7e9;border:1px solid #efdfbc;border-radius:11px;padding:10px;font-size:11px;color:#725d40}
+.badge{font-size:9px;font-weight:800;border-radius:99px;padding:4px 7px;background:#e8f7ee;color:#14733f}
+.tabs{position:fixed;bottom:0;width:100%;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:7px 4px}
+.tab{border:0;background:none;color:#6d7c75;font-size:10px;font-weight:700}.tab.active{color:var(--green)}.tab b{display:block;font-size:19px}.screen{display:none}.screen.active{display:block}
+.storechips{display:flex;gap:6px;overflow:auto;padding:7px 0}.storechip{white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:99px;padding:8px 10px;font-size:11px;font-weight:700}
+@media print{header,.tabs,.no-print{display:none!important}.screen{display:none!important}#printView{display:block!important}body{background:#fff}main{padding:0}.print-row{padding:5px 0;border-bottom:1px solid #ddd}.print-store{break-inside:avoid;margin-bottom:16px}}
+</style></head><body>
+<header><div class="logo">Cart<span>Compare</span> <small style="font-size:10px;color:#777">PERSONAL</small></div><div class="small">Private grocery comparison · data stays on this device</div></header>
+<main>
+<section id="cart" class="screen active"><h1>My List</h1><div class="small">Add anything, then save prices you see while signed into your stores.</div><div id="hero" class="hero"></div><div class="search"><input id="newItem" placeholder="Add an item…"><button class="btn" onclick="addItem()">Add</button></div><div id="cartItems" class="card"></div></section>
+<section id="compare" class="screen"><h1>Compare</h1><div class="note">CartCompare does not store retailer passwords. Sign-in stays inside the retailer page on this phone.</div><div id="compareItems"></div></section>
+<section id="trip" class="screen"><h1>Best Trip</h1><div id="tripBody"></div></section>
+<section id="stores" class="screen"><h1>My Stores</h1><div class="small">Open a retailer, sign in yourself, then save prices from product pages.</div><div id="storeButtons" class="card"></div></section>
+<section id="printView" style="display:none"></section>
+</main>
+<nav class="tabs no-print">
+<button class="tab active" onclick="go('cart',this)"><b>🛒</b>List</button>
+<button class="tab" onclick="go('compare',this)"><b>💲</b>Compare</button>
+<button class="tab" onclick="go('trip',this)"><b>🧭</b>Best Trip</button>
+<button class="tab" onclick="go('stores',this)"><b>🏪</b>Stores</button>
+</nav>
+<script>
+const STORES={"Kroger":"https://www.kroger.com/","Meijer":"https://www.meijer.com/","Walmart":"https://www.walmart.com/","Target":"https://www.target.com/","Aldi":"https://www.aldi.us/","Giant Eagle":"https://www.gianteagle.com/","BJ’s":"https://www.bjs.com/","Costco":"https://www.costco.com/","Sam’s Club":"https://www.samsclub.com/"};
+const base=[["eggs","Eggs","12 ct","🥚"],["milk","Milk","1 gal","🥛"],["bread","Bread","1 loaf","🍞"],["bananas","Bananas","1 bunch","🍌"],["chicken","Chicken breast","5 lb","🍗"],["beef","Ground beef","3 lb","🥩"]];
+let state={items:base.map(x=>({id:x[0],name:x[1],qty:x[2],emoji:x[3],quotes:[]}))};try{let s=JSON.parse(localStorage.getItem("cc-personal-v1")||"null");if(s)state=s}catch(e){}
+const money=n=>"$"+Number(n).toFixed(2),esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function save(){localStorage.setItem("cc-personal-v1",JSON.stringify(state))}
+function go(id,b){document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));document.getElementById(id).classList.add("active");document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));if(b)b.classList.add("active");render()}
+function addItem(){let e=document.getElementById("newItem"),v=e.value.trim();if(!v)return;state.items.push({id:"i"+Date.now(),name:v,qty:"1",emoji:"🛍️",quotes:[]});e.value="";render()}
+function removeItem(id){state.items=state.items.filter(x=>x.id!==id);render()}
+function bestQuote(i){return [...i.quotes].sort((a,b)=>a.price-b.price)[0]||null}
+function check(id){let i=state.items.find(x=>x.id===id);let buttons=Object.entries(STORES).map(([s,u])=>'<button class="storechip" onclick="openRetailer(\''+esc(s)+'\',\''+u+'\',\''+id+'\',\''+esc(i.name)+'\')">'+esc(s)+'</button>').join("");modal("<b>Check "+esc(i.name)+"</b><div class='small'>Choose a store, find the exact product, then tap <b>Save price</b>.</div><div class='storechips'>"+buttons+"</div>")}
+function openRetailer(store,url,id,name){closeModal();if(window.Android&&Android.openRetailer)Android.openRetailer(store,url,id,name)}
+window.receiveRetailerQuote=q=>{let i=state.items.find(x=>x.id===q.itemId);if(!i)return;i.quotes=i.quotes.filter(x=>!(x.store===q.store&&x.brand===q.brand&&x.product===q.product));i.quotes.push(q);render();if(window.Android&&Android.toast)Android.toast("Saved "+q.store+" price")};
+function renderCart(){let priced=state.items.filter(x=>bestQuote(x)),total=priced.reduce((s,x)=>s+bestQuote(x).price,0);document.getElementById("hero").innerHTML="<div class='small'>Lowest saved prices</div><div class='big'>"+(priced.length?money(total):"—")+"</div><div class='small'>"+priced.length+" of "+state.items.length+" items priced</div>";document.getElementById("cartItems").innerHTML=state.items.map(i=>{let b=bestQuote(i);return "<div class='item'><div class='emoji'>"+i.emoji+"</div><div class='grow'><b>"+esc(i.name)+"</b><div class='small'>"+esc(i.qty)+(b?" · "+esc(b.brand||"Unbranded")+" · "+esc(b.store):" · no saved price yet")+"</div><button class='link' onclick=\"check('"+i.id+"')\">Check prices ↗</button></div><div>"+(b?"<div class='price best'>"+money(b.price)+"</div>":"")+"<button class='link danger' onclick=\"removeItem('"+i.id+"')\">Remove</button></div></div>"}).join("")}
+function renderCompare(){document.getElementById("compareItems").innerHTML=state.items.map(i=>"<div class='card'><div class='row'><div><b>"+i.emoji+" "+esc(i.name)+"</b><div class='small'>"+esc(i.qty)+"</div></div><button class='btn ghost' onclick=\"check('"+i.id+"')\">+ price</button></div>"+(i.quotes.length?i.quotes.slice().sort((a,b)=>a.price-b.price).map((q,n)=>"<div class='item'><div class='grow'><b>"+esc(q.store)+"</b> "+(n===0?"<span class='badge'>Lowest</span>":"")+"<div class='small'><strong>"+esc(q.brand||"Unbranded")+"</strong> · "+esc(q.product||i.name)+(q.size?" · "+esc(q.size):"")+"</div></div><div class='price "+(n===0?"best":"")+"'>"+money(q.price)+"</div></div>").join(""):"<div class='small'>No prices saved yet.</div>")+"</div>").join("")}
+function trip(){let groups={},unpriced=[];for(const i of state.items){let q=bestQuote(i);if(!q){unpriced.push(i);continue}(groups[q.store]??=[]).push({i,q})}return{groups,unpriced}}
+function renderTrip(){let t=trip(),total=0,html="";for(const [s,a] of Object.entries(t.groups)){let sub=a.reduce((x,y)=>x+y.q.price,0);total+=sub;html+="<div class='card'><div class='row'><b>"+esc(s)+"</b><b>"+money(sub)+"</b></div>"+a.map(x=>"<div class='item'><span>☐</span><div class='grow'><b>"+esc(x.q.brand||"Unbranded")+" — "+esc(x.q.product||x.i.name)+"</b><div class='small'>"+esc(x.i.name)+" · "+esc(x.q.size||x.i.qty)+" · requested "+esc(x.i.qty)+"</div></div><b>"+money(x.q.price)+"</b></div>").join("")+"</div>"}html="<div class='hero'><div class='small'>Best saved shopping trip</div><div class='big'>"+(Object.keys(t.groups).length?money(total):"—")+"</div><div class='small'>"+Object.keys(t.groups).length+" store(s) · "+t.unpriced.length+" unpriced</div></div>"+html;if(t.unpriced.length)html+="<div class='card'><b>Still need prices</b>"+t.unpriced.map(x=>"<div class='item'><div class='grow'>"+esc(x.name)+" · "+esc(x.qty)+"</div><button class='link' onclick=\"check('"+x.id+"')\">Check</button></div>").join("")+"</div>";html+="<div class='row no-print'><button class='btn' onclick='printList()'>Print / PDF</button><button class='btn ghost' onclick='shareList()'>Share</button></div>";document.getElementById("tripBody").innerHTML=html}
+function printList(){let t=trip(),total=0,body="<div style='padding:18px;font-family:Arial'><h1>CartCompare · Shopping List</h1>";for(const [s,a] of Object.entries(t.groups)){let sub=a.reduce((x,y)=>x+y.q.price,0);total+=sub;body+="<div class='print-store'><h2>"+esc(s)+" · "+a.length+" item(s)</h2>"+a.map(x=>"<div class='print-row'>☐ <b>"+esc(x.q.brand||"Unbranded")+" — "+esc(x.q.product||x.i.name)+"</b><br><small>"+esc(x.i.name)+" · "+esc(x.q.size||x.i.qty)+" · requested "+esc(x.i.qty)+"</small><span style='float:right'><b>"+money(x.q.price)+"</b></span></div>").join("")+"<div><b>Subtotal: "+money(sub)+"</b></div></div>"}body+="<h2>Estimated total: "+money(total)+"</h2><p style='font-size:10px;color:#666'>Verify price and availability at checkout.</p></div>";document.getElementById("printView").innerHTML=body;setTimeout(()=>window.Android?Android.printPage():window.print(),150)}
+function shareList(){let t=trip(),lines=["CartCompare shopping list"];for(const [s,a] of Object.entries(t.groups)){lines.push("\n"+s);a.forEach(x=>lines.push("☐ "+(x.q.brand||"Unbranded")+" — "+(x.q.product||x.i.name)+" · "+(x.q.size||x.i.qty)+" · "+money(x.q.price)))}if(window.Android)Android.shareText("CartCompare shopping list",lines.join("\n"))}
+function renderStores(){document.getElementById("storeButtons").innerHTML=Object.entries(STORES).map(([s,u])=>"<div class='item'><div class='emoji'>🏪</div><div class='grow'><b>"+esc(s)+"</b><div class='small'>Open and sign in locally</div></div><button class='btn ghost' onclick=\"openRetailer('"+esc(s)+"','"+u+"','','Price check')\">Open</button></div>").join("")}
+function modal(inner){let d=document.createElement("div");d.id="modal";d.style="position:fixed;inset:0;background:#0007;z-index:30;display:flex;align-items:end";d.innerHTML="<div style='background:white;width:100%;padding:18px;border-radius:20px 20px 0 0'>"+inner+"<button class='btn ghost' style='width:100%;margin-top:12px' onclick='closeModal()'>Close</button></div>";document.body.appendChild(d)}
+function closeModal(){document.getElementById("modal")?.remove()}function render(){renderCart();renderCompare();renderTrip();renderStores();save()}
+document.getElementById("newItem").addEventListener("keydown",e=>{if(e.key==="Enter")addItem()});render();
+</script></body></html>
