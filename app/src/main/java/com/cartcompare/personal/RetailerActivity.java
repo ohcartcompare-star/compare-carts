@@ -18,6 +18,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
@@ -98,7 +99,7 @@ public class RetailerActivity extends Activity {
             if(!q.isEmpty()) webView.loadUrl(buildSearchUrl(store,q));
             return true;
         });
-        save.setOnClickListener(v->showSaveDialog());
+        save.setOnClickListener(v->extractProductThenShowDialog());
     }
 
     private String enc(String q) {
@@ -137,7 +138,46 @@ public class RetailerActivity extends Activity {
         EditText e=new EditText(this); e.setHint(hint); return e;
     }
 
-    private void showSaveDialog(){
+    private void extractProductThenShowDialog() {
+        String js =
+            "(function(){" +
+            "var out={brand:'',product:'',size:'',price:'',note:''};" +
+            "function clean(v){return (v==null?'':String(v)).replace(/\\s+/g,' ').trim();}" +
+            "function meta(sel){var e=document.querySelector(sel);return e?clean(e.content||e.getAttribute('content')||e.innerText||''):'';}" +
+            "function text(sel){var e=document.querySelector(sel);return e?clean(e.innerText||e.textContent||''):'';}" +
+            "function brandVal(v){if(!v)return '';if(typeof v==='string')return clean(v);if(v.name)return clean(v.name);return '';}" +
+            "function priceVal(v){if(v==null)return '';var m=clean(v).match(/(\\d{1,5}(?:,\\d{3})*(?:\\.\\d{2})?)/);return m?m[1].replace(/,/g,''):'';}" +
+            "function absorb(p){if(!p||typeof p!=='object')return;" +
+              "if(!out.product)out.product=clean(p.name||'');" +
+              "if(!out.brand)out.brand=brandVal(p.brand||p.manufacturer);" +
+              "if(!out.size)out.size=clean(p.size||'');" +
+              "var o=p.offers;if(Array.isArray(o))o=o[0];" +
+              "if(o&&typeof o==='object'&&!out.price)out.price=priceVal(o.price||o.lowPrice||o.highPrice);" +
+            "}" +
+            "function walk(v){if(!v)return;if(Array.isArray(v)){v.forEach(walk);return;}if(typeof v!=='object')return;" +
+              "var t=v['@type'];if(t==='Product'||(Array.isArray(t)&&t.indexOf('Product')>=0))absorb(v);" +
+              "Object.keys(v).forEach(function(k){if(k==='offers'||k==='brand')return;var x=v[k];if(x&&typeof x==='object')walk(x);});" +
+            "}" +
+            "document.querySelectorAll('script[type=\\"application/ld+json\\"]').forEach(function(s){try{walk(JSON.parse(s.textContent));}catch(e){}});" +
+            "if(!out.product)out.product=meta('meta[property=\\"og:title\\"]')||meta('meta[name=\\"twitter:title\\"]')||text('h1');" +
+            "if(!out.brand)out.brand=text('[itemprop=\\"brand\\"]')||text('[data-testid*=\\"brand\\"]')||text('[data-automation-id*=\\"brand\\"]');" +
+            "if(!out.price)out.price=priceVal(meta('meta[itemprop=\\"price\\"]')||meta('meta[property=\\"product:price:amount\\"]')||text('[itemprop=\\"price\\"]')||text('[data-automation-id=\\"product-price\\"]')||text('[data-testid*=\\"price\\"]'));" +
+            "if(!out.size){var src=out.product+' '+meta('meta[name=\\"description\\"]');var m=src.match(/(\\d+(?:\\.\\d+)?\\s*(?:fl\\s*oz|oz|lb|lbs|pounds?|ct|count|pk|pack|gal|gallon|qt|pt|ml|kg|g|l)\\b(?:\\s*[x×]\\s*\\d+)?)/i);if(m)out.size=clean(m[1]);}" +
+            "return JSON.stringify(out);" +
+            "})()";
+
+        webView.evaluateJavascript(js, value -> {
+            JSONObject auto=new JSONObject();
+            try {
+                Object decoded=new JSONTokener(value).nextValue();
+                String raw=decoded instanceof String ? (String)decoded : value;
+                if(raw!=null && !raw.equals("null")) auto=new JSONObject(raw);
+            } catch(Exception ignored) {}
+            showSaveDialog(auto);
+        });
+    }
+
+    private void showSaveDialog(JSONObject auto){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
         EditText brand=field("Brand");
         EditText product=field("Exact product");
@@ -145,11 +185,17 @@ public class RetailerActivity extends Activity {
         EditText price=field("Price");
         price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         EditText note=field("Sale/member note (optional)");
+
+        brand.setText(auto.optString("brand",""));
+        product.setText(auto.optString("product",""));
+        size.setText(auto.optString("size",""));
+        price.setText(auto.optString("price",""));
+
         box.addView(brand); box.addView(product); box.addView(size); box.addView(price); box.addView(note);
 
         new AlertDialog.Builder(this)
             .setTitle("Save "+store+" price")
-            .setMessage("Enter exactly what you see. CartCompare never asks for your retailer password.")
+            .setMessage("I filled in what I could read from this product page. Review it before saving, especially sale/member prices and package size.")
             .setView(box)
             .setNegativeButton("Cancel",null)
             .setPositiveButton("Save",(d,w)->{
@@ -166,7 +212,7 @@ public class RetailerActivity extends Activity {
                     Intent out=new Intent(); out.putExtra("quoteJson",q.toString());
                     setResult(RESULT_OK,out); finish();
                 }catch(Exception ex){
-                    new AlertDialog.Builder(this).setMessage("Enter a valid numeric price.")
+                    new AlertDialog.Builder(this).setMessage("Please check the extracted price and enter a valid numeric price.")
                         .setPositiveButton("OK",null).show();
                 }
             }).show();
