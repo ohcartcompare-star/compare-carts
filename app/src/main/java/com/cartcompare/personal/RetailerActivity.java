@@ -158,11 +158,11 @@ public class RetailerActivity extends Activity {
               "var t=v['@type'];if(t==='Product'||(Array.isArray(t)&&t.indexOf('Product')>=0))absorb(v);" +
               "Object.keys(v).forEach(function(k){if(k==='offers'||k==='brand')return;var x=v[k];if(x&&typeof x==='object')walk(x);});" +
             "}" +
-            "document.querySelectorAll('script[type=\\"application/ld+json\\"]').forEach(function(s){try{walk(JSON.parse(s.textContent));}catch(e){}});" +
-            "if(!out.product)out.product=meta('meta[property=\\"og:title\\"]')||meta('meta[name=\\"twitter:title\\"]')||text('h1');" +
-            "if(!out.brand)out.brand=text('[itemprop=\\"brand\\"]')||text('[data-testid*=\\"brand\\"]')||text('[data-automation-id*=\\"brand\\"]');" +
-            "if(!out.price)out.price=priceVal(meta('meta[itemprop=\\"price\\"]')||meta('meta[property=\\"product:price:amount\\"]')||text('[itemprop=\\"price\\"]')||text('[data-automation-id=\\"product-price\\"]')||text('[data-testid*=\\"price\\"]'));" +
-            "if(!out.size){var src=out.product+' '+meta('meta[name=\\"description\\"]');var m=src.match(/(\\d+(?:\\.\\d+)?\\s*(?:fl\\s*oz|oz|lb|lbs|pounds?|ct|count|pk|pack|gal|gallon|qt|pt|ml|kg|g|l)\\b(?:\\s*[x×]\\s*\\d+)?)/i);if(m)out.size=clean(m[1]);}" +
+            "document.querySelectorAll('script[type='application/ld+json']').forEach(function(s){try{walk(JSON.parse(s.textContent));}catch(e){}});" +
+            "if(!out.product)out.product=meta('meta[property='og:title']')||meta('meta[name='twitter:title']')||text('h1');" +
+            "if(!out.brand)out.brand=text('[itemprop='brand']')||text('[data-testid*='brand']')||text('[data-automation-id*='brand']');" +
+            "if(!out.price)out.price=priceVal(meta('meta[itemprop='price']')||meta('meta[property='product:price:amount']')||text('[itemprop='price']')||text('[data-automation-id='product-price']')||text('[data-testid*='price']'));" +
+            "if(!out.size){var src=out.product+' '+meta('meta[name='description']');var m=src.match(/(\\d+(?:\\.\\d+)?\\s*(?:fl\\s*oz|oz|lb|lbs|pounds?|ct|count|pk|pack|gal|gallon|qt|pt|ml|kg|g|l)\\b(?:\\s*[x×]\\s*\\d+)?)/i);if(m)out.size=clean(m[1]);}" +
             "return JSON.stringify(out);" +
             "})()";
 
