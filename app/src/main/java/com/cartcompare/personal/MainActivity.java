@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.print.PrintManager;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -12,9 +13,14 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+
 public class MainActivity extends Activity {
     private static final int RETAILER_REQUEST = 711;
+    private static final int EXPORT_CSV_REQUEST = 712;
     private WebView webView;
+    private String pendingCsv = "";
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
@@ -41,9 +47,11 @@ public class MainActivity extends Activity {
                 startActivityForResult(i, RETAILER_REQUEST);
             });
         }
+
         @JavascriptInterface public void toast(String message) {
             runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
         }
+
         @JavascriptInterface public void shareText(String subject, String content) {
             runOnUiThread(() -> {
                 Intent share = new Intent(Intent.ACTION_SEND);
@@ -53,6 +61,7 @@ public class MainActivity extends Activity {
                 startActivity(Intent.createChooser(share, "Share CartCompare list"));
             });
         }
+
         @JavascriptInterface public void printPage() {
             runOnUiThread(() -> {
                 PrintManager pm = (PrintManager)getSystemService(Context.PRINT_SERVICE);
@@ -60,16 +69,46 @@ public class MainActivity extends Activity {
                     webView.createPrintDocumentAdapter("CartCompare Shopping List"), null);
             });
         }
+
+        @JavascriptInterface public void exportCsv(String filename, String content) {
+            runOnUiThread(() -> {
+                pendingCsv = content == null ? "" : content;
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("text/csv");
+                i.putExtra(Intent.EXTRA_TITLE, (filename == null || filename.trim().isEmpty())
+                    ? "CartCompare-Shopping-List.csv" : filename);
+                startActivityForResult(i, EXPORT_CSV_REQUEST);
+            });
+        }
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
         if (requestCode == RETAILER_REQUEST && resultCode == RESULT_OK && data != null) {
             String json = data.getStringExtra("quoteJson");
             if (json != null) {
                 String safe = json.replace("\\","\\\\").replace("'","\\'").replace("\n","\\n");
                 webView.evaluateJavascript("window.receiveRetailerQuote(JSON.parse('" + safe + "'));", null);
             }
+            return;
+        }
+
+        if (requestCode == EXPORT_CSV_REQUEST && resultCode == RESULT_OK && data != null) {
+            Uri uri = data.getData();
+            if (uri != null) {
+                try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                    if (out != null) {
+                        out.write(pendingCsv.getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                        Toast.makeText(this, "CSV exported", Toast.LENGTH_SHORT).show();
+                    }
+                } catch (Exception e) {
+                    Toast.makeText(this, "Could not export CSV", Toast.LENGTH_LONG).show();
+                }
+            }
+            pendingCsv = "";
         }
     }
 }
