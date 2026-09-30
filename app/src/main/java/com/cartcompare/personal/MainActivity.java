@@ -17,6 +17,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 import org.json.JSONObject;
+
 import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
@@ -30,14 +31,17 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
+
         webView = new WebView(this);
         setContentView(webView);
+
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
+
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient());
         webView.addJavascriptInterface(new Bridge(), "Android");
@@ -48,14 +52,28 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void openRetailer(String store, String url, String itemId, String itemName) {
             runOnUiThread(() -> {
                 Intent i = new Intent(MainActivity.this, RetailerActivity.class);
-                i.putExtra("store", store); i.putExtra("url", url);
-                i.putExtra("itemId", itemId); i.putExtra("itemName", itemName);
+                i.putExtra("store", store);
+                i.putExtra("url", url);
+                i.putExtra("itemId", itemId);
+                i.putExtra("itemName", itemName);
+                startActivityForResult(i, RETAILER_REQUEST);
+            });
+        }
+
+        @JavascriptInterface public void openRetailerSession(String store, String url, String queueJson) {
+            runOnUiThread(() -> {
+                Intent i = new Intent(MainActivity.this, RetailerActivity.class);
+                i.putExtra("store", store);
+                i.putExtra("url", url);
+                i.putExtra("queueJson", queueJson);
                 startActivityForResult(i, RETAILER_REQUEST);
             });
         }
 
         @JavascriptInterface public void toast(String message) {
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
+            runOnUiThread(() ->
+                Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show()
+            );
         }
 
         @JavascriptInterface public void shareText(String subject, String content) {
@@ -71,8 +89,13 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void printPage() {
             runOnUiThread(() -> {
                 PrintManager pm = (PrintManager)getSystemService(Context.PRINT_SERVICE);
-                if (pm != null) pm.print("CartCompare Shopping List",
-                    webView.createPrintDocumentAdapter("CartCompare Shopping List"), null);
+                if (pm != null) {
+                    pm.print(
+                        "CartCompare Shopping List",
+                        webView.createPrintDocumentAdapter("CartCompare Shopping List"),
+                        null
+                    );
+                }
             });
         }
 
@@ -83,7 +106,8 @@ public class MainActivity extends Activity {
                         Barcode.FORMAT_UPC_A,
                         Barcode.FORMAT_UPC_E,
                         Barcode.FORMAT_EAN_13,
-                        Barcode.FORMAT_EAN_8)
+                        Barcode.FORMAT_EAN_8
+                    )
                     .enableAutoZoom()
                     .build();
 
@@ -92,25 +116,42 @@ public class MainActivity extends Activity {
                     .addOnSuccessListener(barcode -> {
                         String raw = barcode.getRawValue();
                         if (raw != null && !raw.trim().isEmpty()) {
-                            webView.evaluateJavascript("window.receiveBarcode(" + JSONObject.quote(raw.trim()) + ");", null);
+                            webView.evaluateJavascript(
+                                "window.receiveBarcode(" + JSONObject.quote(raw.trim()) + ");",
+                                null
+                            );
                         } else {
-                            Toast.makeText(MainActivity.this, "No barcode value found", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(
+                                MainActivity.this,
+                                "No barcode value found",
+                                Toast.LENGTH_SHORT
+                            ).show();
                         }
                     })
                     .addOnCanceledListener(() -> {})
-                    .addOnFailureListener(e -> Toast.makeText(MainActivity.this,
-                        "Barcode scanner could not start. Try again in a moment.", Toast.LENGTH_LONG).show());
+                    .addOnFailureListener(e ->
+                        Toast.makeText(
+                            MainActivity.this,
+                            "Barcode scanner could not start. Try again in a moment.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    );
             });
         }
 
         @JavascriptInterface public void exportCsv(String filename, String content) {
             runOnUiThread(() -> {
                 pendingCsv = content == null ? "" : content;
+
                 Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("text/csv");
-                i.putExtra(Intent.EXTRA_TITLE, (filename == null || filename.trim().isEmpty())
-                    ? "CartCompare-Shopping-List.csv" : filename);
+                i.putExtra(
+                    Intent.EXTRA_TITLE,
+                    (filename == null || filename.trim().isEmpty())
+                        ? "CartCompare-Shopping-List.csv"
+                        : filename
+                );
                 startActivityForResult(i, EXPORT_CSV_REQUEST);
             });
         }
@@ -120,12 +161,23 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == RETAILER_REQUEST && resultCode == RESULT_OK && data != null) {
-            String json = data.getStringExtra("quoteJson");
-            if (json != null) {
-                String safe = json.replace("\\","\\\\").replace("'","\\'").replace("\n","\\n");
-                webView.evaluateJavascript("window.receiveRetailerQuote(JSON.parse('" + safe + "'));", null);
+            String quotesJson = data.getStringExtra("quotesJson");
+            if (quotesJson != null) {
+                webView.evaluateJavascript(
+                    "window.receiveRetailerQuotes(JSON.parse(" + JSONObject.quote(quotesJson) + "));",
+                    null
+                );
+                return;
             }
-            return;
+
+            String quoteJson = data.getStringExtra("quoteJson");
+            if (quoteJson != null) {
+                webView.evaluateJavascript(
+                    "window.receiveRetailerQuote(JSON.parse(" + JSONObject.quote(quoteJson) + "));",
+                    null
+                );
+                return;
+            }
         }
 
         if (requestCode == EXPORT_CSV_REQUEST && resultCode == RESULT_OK && data != null) {
