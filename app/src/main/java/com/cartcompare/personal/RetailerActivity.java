@@ -2,6 +2,10 @@ package com.cartcompare.personal;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
+import android.os.Build;
+import android.view.View;
+import android.view.autofill.AutofillManager;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -110,6 +114,16 @@ public class RetailerActivity extends Activity {
         ));
         root.addView(searchBar);
 
+        // Autofill is controlled by Android's selected password manager.
+        // This help link never reads retailer credentials or login form values.
+        TextView loginHelp = new TextView(this);
+        loginHelp.setText("🔑 Saved-password autofill help");
+        loginHelp.setTextColor(Color.rgb(22, 78, 112));
+        loginHelp.setTextSize(12);
+        loginHelp.setPadding(16, 5, 12, 9);
+        loginHelp.setOnClickListener(v -> showAutofillHelp());
+        root.addView(loginHelp);
+
         webView = new WebView(this);
         root.addView(webView, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -117,6 +131,14 @@ public class RetailerActivity extends Activity {
             1
         ));
         setContentView(root);
+
+        // Allow the WebView's actual website login fields to participate in
+        // Android Autofill. Do NOT attempt to inspect or store passwords.
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_YES);
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -131,7 +153,13 @@ public class RetailerActivity extends Activity {
         }
 
         webView.setWebChromeClient(new WebChromeClient());
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // Preserve retailer sessions where the site allows it.
+                CookieManager.getInstance().flush();
+            }
+        });
 
         done.setOnClickListener(v -> finishSession());
         skip.setOnClickListener(v -> skipCurrentItem());
@@ -145,6 +173,32 @@ public class RetailerActivity extends Activity {
         });
 
         loadCurrentItem(false);
+    }
+
+    private void showAutofillHelp() {
+        String status = "";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AutofillManager manager = (AutofillManager) getSystemService(Context.AUTOFILL_SERVICE);
+            status = (manager != null && manager.isEnabled())
+                ? "Your phone has an autofill service enabled.\\n\\n"
+                : "No enabled autofill service was detected.\\n\\n";
+        }
+        new AlertDialog.Builder(this)
+            .setTitle("Use your saved retailer passwords")
+            .setMessage(status.replace("\\\\n", "\\n") +
+                "On the retailer's sign-in page, tap its username or password box. " +
+                "Choose your phone's password manager if Android offers it. " +
+                "For Google passwords, set Google as your preferred autofill service in " +
+                "Samsung Settings > General management > Passwords, passkeys and autofill.\\n\\n" +
+                "Some retailers or password managers do not support sign-in in this " +
+                "in-app browser. CartCompare never reads or saves your passwords.")
+            .setPositiveButton("OK", null)
+            .show();
+    }
+
+    @Override protected void onPause() {
+        CookieManager.getInstance().flush();
+        super.onPause();
     }
 
     private void loadQueueFromIntent() {
