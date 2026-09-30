@@ -178,7 +178,7 @@ public class RetailerActivity extends Activity {
     private void showAutofillHelp() {
         String status = "";
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            AutofillManager manager = (AutofillManager) getSystemService(Context.AUTOFILL_SERVICE);
+            AutofillManager manager = getSystemService(AutofillManager.class);
             status = (manager != null && manager.isEnabled())
                 ? "Your phone has an autofill service enabled.\n\n"
                 : "No enabled autofill service was detected.\n\n";
