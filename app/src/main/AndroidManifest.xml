@@ -2,16 +2,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <application
         android:allowBackup="true"
         android:usesCleartextTraffic="false"
         android:label="@string/app_name"
         android:icon="@drawable/cartcompare_icon"
-        android:theme="@style/AppTheme">\n        <meta-data\n            android:name="com.google.mlkit.vision.DEPENDENCIES"\n            android:value="barcode_ui"/>
+        android:theme="@style/AppTheme">
+
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui"/>
+
         <activity
             android:name=".RetailerActivity"
             android:screenOrientation="portrait"
             android:exported="false"/>
+
         <activity
             android:name=".MainActivity"
             android:screenOrientation="portrait"
