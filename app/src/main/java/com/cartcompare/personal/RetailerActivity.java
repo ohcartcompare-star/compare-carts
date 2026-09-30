@@ -17,129 +17,273 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 public class RetailerActivity extends Activity {
     private WebView webView;
-    private String store, itemId, itemName, homeUrl;
+    private String store = "";
+    private String homeUrl = "";
     private EditText searchBox;
+    private TextView title;
+    private Button searchButton;
+
+    private JSONArray queue = new JSONArray();
+    private JSONArray savedQuotes = new JSONArray();
+    private int currentIndex = 0;
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
-        store=getIntent().getStringExtra("store");
-        itemId=getIntent().getStringExtra("itemId");
-        itemName=getIntent().getStringExtra("itemName");
-        homeUrl=getIntent().getStringExtra("url");
 
-        if (store == null) store = "";
-        if (itemId == null) itemId = "";
-        if (itemName == null) itemName = "";
-        if (homeUrl == null) homeUrl = "";
+        String incomingStore = getIntent().getStringExtra("store");
+        String incomingUrl = getIntent().getStringExtra("url");
+        store = incomingStore == null ? "" : incomingStore;
+        homeUrl = incomingUrl == null ? "" : incomingUrl;
 
-        LinearLayout root=new LinearLayout(this);
+        loadQueueFromIntent();
+
+        LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.WHITE);
 
-        LinearLayout bar=new LinearLayout(this);
+        LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        Button back=new Button(this); back.setText("←");
-        TextView title=new TextView(this); title.setText(store); title.setTextSize(16);
-        Button save=new Button(this); save.setText("Save price");
-        bar.addView(back,new LinearLayout.LayoutParams(60,ViewGroup.LayoutParams.WRAP_CONTENT));
-        bar.addView(title,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
-        bar.addView(save);
+        bar.setPadding(6, 4, 6, 4);
+
+        Button done = new Button(this);
+        done.setText("Done");
+
+        title = new TextView(this);
+        title.setTextSize(15);
+        title.setPadding(8, 0, 8, 0);
+
+        Button skip = new Button(this);
+        skip.setText("Skip");
+
+        Button save = new Button(this);
+        save.setText("Save");
+
+        bar.addView(done, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        bar.addView(title, new LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1
+        ));
+        bar.addView(skip, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        bar.addView(save, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
         root.addView(bar);
 
-        LinearLayout searchBar=new LinearLayout(this);
+        LinearLayout searchBar = new LinearLayout(this);
         searchBar.setGravity(Gravity.CENTER_VERTICAL);
-        searchBar.setPadding(8,2,8,6);
-        searchBox=new EditText(this);
+        searchBar.setPadding(8, 2, 8, 6);
+
+        searchBox = new EditText(this);
         searchBox.setSingleLine(true);
         searchBox.setHint("Search this store");
-        if (!itemId.isEmpty() && !itemName.equals("Price check")) searchBox.setText(itemName);
-        Button searchButton=new Button(this); searchButton.setText("Search");
-        searchBar.addView(searchBox,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
-        searchBar.addView(searchButton,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        searchButton = new Button(this);
+        searchButton.setText("Search");
+
+        searchBar.addView(searchBox, new LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1
+        ));
+        searchBar.addView(searchButton, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
         root.addView(searchBar);
 
-        webView=new WebView(this);
-        root.addView(webView,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1));
+        webView = new WebView(this);
+        root.addView(webView, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            0,
+            1
+        ));
         setContentView(root);
 
-        WebSettings s=webView.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setDatabaseEnabled(true);
-        s.setBuiltInZoomControls(true);
-        s.setDisplayZoomControls(false);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
 
         CookieManager.getInstance().setAcceptCookie(true);
-        if(android.os.Build.VERSION.SDK_INT>=21) CookieManager.getInstance().setAcceptThirdPartyCookies(webView,true);
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+        }
 
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient());
 
-        // When opened from a shopping-list item, go straight to search results.
-        if (!itemId.isEmpty() && !itemName.isEmpty() && !itemName.equals("Price check")) {
-            webView.loadUrl(buildSearchUrl(store, itemName));
-        } else {
-            webView.loadUrl(homeUrl);
-        }
+        done.setOnClickListener(v -> finishSession());
+        skip.setOnClickListener(v -> skipCurrentItem());
+        save.setOnClickListener(v -> extractProductThenShowDialog());
 
-        back.setOnClickListener(v->{ if(webView.canGoBack()) webView.goBack(); else finish(); });
-        searchButton.setOnClickListener(v -> {
-            String q=searchBox.getText().toString().trim();
-            if(!q.isEmpty()) {
-                searchButton.setText("Loading…");
-                webView.loadUrl(buildSearchUrl(store,q));
-                webView.postDelayed(() -> searchButton.setText("Search"), 1500);
-            }
-        });
+        searchButton.setOnClickListener(v -> searchCurrentText());
+
         searchBox.setOnEditorActionListener((v, actionId, event) -> {
-            String q=searchBox.getText().toString().trim();
-            if(!q.isEmpty()) webView.loadUrl(buildSearchUrl(store,q));
+            searchCurrentText();
             return true;
         });
-        save.setOnClickListener(v->extractProductThenShowDialog());
+
+        loadCurrentItem(false);
+    }
+
+    private void loadQueueFromIntent() {
+        try {
+            String queueJson = getIntent().getStringExtra("queueJson");
+            if (queueJson != null && !queueJson.trim().isEmpty()) {
+                queue = new JSONArray(queueJson);
+            }
+        } catch (Exception ignored) {
+            queue = new JSONArray();
+        }
+
+        if (queue.length() == 0) {
+            try {
+                String itemId = getIntent().getStringExtra("itemId");
+                String itemName = getIntent().getStringExtra("itemName");
+
+                JSONObject item = new JSONObject();
+                item.put("itemId", itemId == null ? "" : itemId);
+                item.put("itemName", itemName == null ? "Price check" : itemName);
+                item.put("searchTerm", itemName == null ? "" : itemName);
+                queue.put(item);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private JSONObject currentItem() {
+        return queue.optJSONObject(currentIndex);
+    }
+
+    private String currentItemId() {
+        JSONObject item = currentItem();
+        return item == null ? "" : item.optString("itemId", "");
+    }
+
+    private String currentItemName() {
+        JSONObject item = currentItem();
+        return item == null ? "Price check" : item.optString("itemName", "Price check");
+    }
+
+    private String currentSearchTerm() {
+        JSONObject item = currentItem();
+        if (item == null) return "";
+        String term = item.optString("searchTerm", "");
+        if (term.trim().isEmpty()) term = item.optString("itemName", "");
+        return term;
+    }
+
+    private void loadCurrentItem(boolean announce) {
+        if (currentIndex >= queue.length()) {
+            finishSession();
+            return;
+        }
+
+        String name = currentItemName();
+        String term = currentSearchTerm();
+
+        title.setText(store + " • " + (currentIndex + 1) + "/" + queue.length());
+        searchBox.setText(term);
+
+        if (announce) {
+            Toast.makeText(this, "Next: " + name, Toast.LENGTH_SHORT).show();
+        }
+
+        if (!term.trim().isEmpty()) {
+            webView.stopLoading();
+            webView.loadUrl(buildSearchUrl(store, term));
+        } else if (!homeUrl.isEmpty()) {
+            webView.loadUrl(homeUrl);
+        }
+    }
+
+    private void searchCurrentText() {
+        String q = searchBox.getText().toString().trim();
+        if (q.isEmpty()) return;
+
+        searchButton.setText("Loading…");
+        webView.loadUrl(buildSearchUrl(store, q));
+        webView.postDelayed(() -> searchButton.setText("Search"), 1500);
+    }
+
+    private void skipCurrentItem() {
+        String skipped = currentItemName();
+        Toast.makeText(this, "Skipped: " + skipped, Toast.LENGTH_SHORT).show();
+        currentIndex++;
+        loadCurrentItem(true);
+    }
+
+    private void advanceAfterSave() {
+        currentIndex++;
+        loadCurrentItem(true);
+    }
+
+    private void finishSession() {
+        Intent result = new Intent();
+        result.putExtra("quotesJson", savedQuotes.toString());
+        setResult(RESULT_OK, result);
+        finish();
     }
 
     private String enc(String q) {
-        try { return URLEncoder.encode(q, StandardCharsets.UTF_8.toString()); }
-        catch(Exception e) { return q.replace(" ","+"); }
+        try {
+            return URLEncoder.encode(q, StandardCharsets.UTF_8.toString());
+        } catch (Exception e) {
+            return q.replace(" ", "+");
+        }
     }
 
     private String buildSearchUrl(String storeName, String query) {
-        String q=enc(query);
-        switch(storeName) {
+        String q = enc(query);
+
+        switch (storeName) {
             case "Kroger":
-                return "https://www.kroger.com/search?query="+q;
+                return "https://www.kroger.com/search?query=" + q;
             case "Walmart":
-                return "https://www.walmart.com/search?q="+q;
+                return "https://www.walmart.com/search?q=" + q;
             case "Target":
-                return "https://www.target.com/s?searchTerm="+q;
+                return "https://www.target.com/s?searchTerm=" + q;
             case "Meijer":
-                return "https://www.meijer.com/shopping/search.html?text="+q;
+                return "https://www.meijer.com/shopping/search.html?text=" + q;
             case "Aldi":
-                return "https://shop.aldi.us/store/aldi/s?k="+q;
+                return "https://shop.aldi.us/store/aldi/s?k=" + q;
             case "Giant Eagle":
-                return "https://www.gianteagle.com/grocery/search?q="+q;
+                return "https://www.gianteagle.com/grocery/search?q=" + q;
             case "Costco":
-                return "https://sameday.costco.com/store/costco/s?k="+q;
+                return "https://sameday.costco.com/store/costco/s?k=" + q;
             case "Sam’s Club":
-                return "https://www.samsclub.com/c/kp/"+q;
+                return "https://www.samsclub.com/c/kp/" + q;
             case "BJ’s":
-                // BJ's search URL changes more often, so use its site search page.
-                return "https://www.bjs.com/search/?search="+q;
+                return "https://www.bjs.com/search/?search=" + q;
             default:
                 return homeUrl;
         }
     }
 
-    private EditText field(String hint){
-        EditText e=new EditText(this); e.setHint(hint); return e;
+    private EditText field(String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        return e;
     }
 
     private void extractProductThenShowDialog() {
@@ -153,16 +297,16 @@ public class RetailerActivity extends Activity {
             "function priceVal(v){if(v==null)return '';var m=clean(v).match(/(?:\\$\\s*)?(\\d{1,5}(?:,\\d{3})*(?:\\.\\d{2}))/);return m?m[1].replace(/,/g,''):'';}" +
             "function sizeVal(v){var m=clean(v).match(/(\\d+(?:\\.\\d+)?\\s*(?:fl\\s*oz|oz|lb|lbs|pounds?|ct|count|pk|pack|gal|gallon|qt|pt|ml|kg|g|l)\\b(?:\\s*[x×]\\s*\\d+)?)/i);return m?clean(m[1]):'';}" +
             "function absorb(p){if(!p||typeof p!=='object')return;" +
-              "if(!out.product)out.product=clean(p.name||p.title||'');" +
-              "if(!out.brand)out.brand=brandVal(p.brand||p.manufacturer);" +
-              "if(!out.size)out.size=clean(p.size||p.weight||'');" +
-              "var o=p.offers;if(Array.isArray(o))o=o[0];" +
-              "if(o&&typeof o==='object'&&!out.price)out.price=priceVal(o.price||o.lowPrice||o.highPrice);" +
-              "if(!out.price)out.price=priceVal(p.price);" +
+                "if(!out.product)out.product=clean(p.name||p.title||'');" +
+                "if(!out.brand)out.brand=brandVal(p.brand||p.manufacturer);" +
+                "if(!out.size)out.size=clean(p.size||p.weight||'');" +
+                "var o=p.offers;if(Array.isArray(o))o=o[0];" +
+                "if(o&&typeof o==='object'&&!out.price)out.price=priceVal(o.price||o.lowPrice||o.highPrice);" +
+                "if(!out.price)out.price=priceVal(p.price);" +
             "}" +
             "function walk(v,depth){if(!v||depth>8)return;if(Array.isArray(v)){v.forEach(function(x){walk(x,depth+1);});return;}if(typeof v!=='object')return;" +
-              "var t=v['@type'];if(t==='Product'||(Array.isArray(t)&&t.indexOf('Product')>=0))absorb(v);" +
-              "Object.keys(v).forEach(function(k){var x=v[k];if(x&&typeof x==='object')walk(x,depth+1);});" +
+                "var t=v['@type'];if(t==='Product'||(Array.isArray(t)&&t.indexOf('Product')>=0))absorb(v);" +
+                "Object.keys(v).forEach(function(k){var x=v[k];if(x&&typeof x==='object')walk(x,depth+1);});" +
             "}" +
             "document.querySelectorAll('script[type=\"application/ld+json\"]').forEach(function(s){try{walk(JSON.parse(s.textContent),0);}catch(e){}});" +
             "var next=document.querySelector('script#__NEXT_DATA__');if(next){try{walk(JSON.parse(next.textContent),0);}catch(e){}}" +
@@ -177,56 +321,99 @@ public class RetailerActivity extends Activity {
             "}catch(e){return JSON.stringify({brand:'',product:'',size:'',price:'',note:'',error:String(e&&e.message?e.message:e)});}})()";
 
         webView.evaluateJavascript(js, value -> {
-            JSONObject auto=new JSONObject();
+            JSONObject auto = new JSONObject();
+
             try {
-                Object decoded=new JSONTokener(value).nextValue();
-                String raw=decoded instanceof String ? (String)decoded : value;
-                if(raw!=null && !raw.equals("null")) auto=new JSONObject(raw);
-            } catch(Exception ignored) {}
+                Object decoded = new JSONTokener(value).nextValue();
+                String raw = decoded instanceof String ? (String)decoded : value;
+                if (raw != null && !raw.equals("null")) {
+                    auto = new JSONObject(raw);
+                }
+            } catch (Exception ignored) {}
+
             showSaveDialog(auto);
         });
     }
 
-    private void showSaveDialog(JSONObject auto){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        EditText brand=field("Brand");
-        EditText product=field("Exact product");
-        EditText size=field("Package size");
-        EditText price=field("Price");
-        price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        EditText note=field("Sale/member note (optional)");
+    private void showSaveDialog(JSONObject auto) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
 
-        brand.setText(auto.optString("brand",""));
-        product.setText(auto.optString("product",""));
-        size.setText(auto.optString("size",""));
-        price.setText(auto.optString("price",""));
+        EditText brand = field("Brand");
+        EditText product = field("Exact product");
+        EditText size = field("Package size");
+        EditText price = field("Price");
+        price.setInputType(
+            InputType.TYPE_CLASS_NUMBER |
+            InputType.TYPE_NUMBER_FLAG_DECIMAL
+        );
+        EditText note = field("Sale/member note (optional)");
 
-        box.addView(brand); box.addView(product); box.addView(size); box.addView(price); box.addView(note);
+        brand.setText(auto.optString("brand", ""));
+        product.setText(auto.optString("product", ""));
+        size.setText(auto.optString("size", ""));
+        price.setText(auto.optString("price", ""));
+
+        box.addView(brand);
+        box.addView(product);
+        box.addView(size);
+        box.addView(price);
+        box.addView(note);
+
+        String message =
+            (auto.optString("product", "").isEmpty() &&
+             auto.optString("price", "").isEmpty())
+            ? "I could not read product details from this page. Open the exact product page, or enter the missing details manually."
+            : "Review the details I found. When you save, CartCompare will automatically search the next item in this same store.";
 
         new AlertDialog.Builder(this)
-            .setTitle("Save "+store+" price")
-            .setMessage((auto.optString("product","").isEmpty() && auto.optString("price","").isEmpty())
-                ? "I could not read product details from this page. Open the exact product page (not just search results), then tap Save price again."
-                : "I filled in what I could read from this product page. Review it before saving, especially sale/member prices and package size.")
+            .setTitle("Save " + store + " price")
+            .setMessage(message)
             .setView(box)
-            .setNegativeButton("Cancel",null)
-            .setPositiveButton("Save",(d,w)->{
-                try{
-                    JSONObject q=new JSONObject();
-                    q.put("itemId",itemId); q.put("itemName",itemName); q.put("store",store);
-                    q.put("brand",brand.getText().toString().trim());
-                    q.put("product",product.getText().toString().trim());
-                    q.put("size",size.getText().toString().trim());
-                    q.put("price",Double.parseDouble(price.getText().toString().trim()));
-                    q.put("note",note.getText().toString().trim());
-                    q.put("pageUrl",webView.getUrl()==null?"":webView.getUrl());
-                    q.put("capturedAt",System.currentTimeMillis());
-                    Intent out=new Intent(); out.putExtra("quoteJson",q.toString());
-                    setResult(RESULT_OK,out); finish();
-                }catch(Exception ex){
-                    new AlertDialog.Builder(this).setMessage("Please check the extracted price and enter a valid numeric price.")
-                        .setPositiveButton("OK",null).show();
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save & Next", (d, w) -> {
+                try {
+                    JSONObject q = new JSONObject();
+                    q.put("itemId", currentItemId());
+                    q.put("itemName", currentItemName());
+                    q.put("store", store);
+                    q.put("brand", brand.getText().toString().trim());
+                    q.put("product", product.getText().toString().trim());
+                    q.put("size", size.getText().toString().trim());
+                    q.put(
+                        "price",
+                        Double.parseDouble(price.getText().toString().trim())
+                    );
+                    q.put("note", note.getText().toString().trim());
+                    q.put(
+                        "pageUrl",
+                        webView.getUrl() == null ? "" : webView.getUrl()
+                    );
+                    q.put("capturedAt", System.currentTimeMillis());
+
+                    savedQuotes.put(q);
+                    Toast.makeText(
+                        this,
+                        "Saved: " + currentItemName(),
+                        Toast.LENGTH_SHORT
+                    ).show();
+
+                    advanceAfterSave();
+                } catch (Exception ex) {
+                    new AlertDialog.Builder(this)
+                        .setMessage("Please check the price and enter a valid numeric price.")
+                        .setPositiveButton("OK", null)
+                        .show();
                 }
-            }).show();
+            })
+            .show();
+    }
+
+    @Override public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            finishSession();
+        }
     }
 }
