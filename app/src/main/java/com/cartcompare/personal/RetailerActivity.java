@@ -180,16 +180,16 @@ public class RetailerActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             AutofillManager manager = (AutofillManager) getSystemService(Context.AUTOFILL_SERVICE);
             status = (manager != null && manager.isEnabled())
-                ? "Your phone has an autofill service enabled.\\n\\n"
-                : "No enabled autofill service was detected.\\n\\n";
+                ? "Your phone has an autofill service enabled.\n\n"
+                : "No enabled autofill service was detected.\n\n";
         }
         new AlertDialog.Builder(this)
             .setTitle("Use your saved retailer passwords")
-            .setMessage(status.replace("\\\\n", "\\n") +
+            .setMessage(status +
                 "On the retailer's sign-in page, tap its username or password box. " +
                 "Choose your phone's password manager if Android offers it. " +
                 "For Google passwords, set Google as your preferred autofill service in " +
-                "Samsung Settings > General management > Passwords, passkeys and autofill.\\n\\n" +
+                "Samsung Settings > General management > Passwords, passkeys and autofill.\n\n" +
                 "Some retailers or password managers do not support sign-in in this " +
                 "in-app browser. CartCompare never reads or saves your passwords.")
             .setPositiveButton("OK", null)
