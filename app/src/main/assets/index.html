@@ -42,7 +42,7 @@ main{padding:15px 15px 100px}h1{font-size:27px;margin:4px 0 2px}.card{background
 
 <section id="screen-compare" class="screen">
   <h1>Compare</h1>
-  <div class="note">Tap <b>Check price</b>, choose a retailer, open an exact product, and tap <b>Save price</b>. The current build tries to auto-fill product details from the page.</div>
+  <div class="note">Tap <b>Check price</b> and choose a retailer. CartCompare will stay in that store and move through the rest of your list with <b>Save & Next</b> or <b>Skip</b>.</div>
   <div id="compareItems"></div>
 </section>
 
@@ -54,7 +54,7 @@ main{padding:15px 15px 100px}h1{font-size:27px;margin:4px 0 2px}.card{background
 
 <section id="screen-stores" class="screen">
   <h1>My Stores</h1>
-  <div class="small">Open a retailer and sign in yourself. CartCompare does not ask for your retailer password.</div>
+  <div class="small">Open a retailer and work through your list without returning here after every item. Use <b>Save & Next</b> or <b>Skip</b>. CartCompare does not ask for your retailer password.</div>
   <div id="storeButtons" class="card"></div>
 </section>
 
@@ -166,18 +166,68 @@ function removeItem(id){
 function openCheckModal(id){
   const item=itemById(id);
   if(!item) return;
-  const term=item.upc||item.name;
+
   const buttons=Object.keys(STORES).map(store=>
-    '<button class="storechip" data-store="'+esc(store)+'" data-item="'+esc(id)+'" data-search="'+esc(term)+'">'+esc(store)+'</button>'
+    '<button class="storechip" data-store="'+esc(store)+'" data-item="'+esc(id)+'">'+esc(store)+'</button>'
   ).join("");
+
   const what=item.upc ? 'barcode <b>'+esc(item.upc)+'</b>' : '<b>'+esc(item.name)+'</b>';
-  showModal('<b>Check '+esc(item.name)+'</b><div class="small" style="margin:6px 0">Choose a store. CartCompare will search that retailer for '+what+'. If a retailer does not index the UPC, you can change the search to the product name.</div><div class="storechips">'+buttons+'</div>');
+
+  showModal(
+    '<b>Start with '+esc(item.name)+'</b>'+
+    '<div class="small" style="margin:6px 0">'+
+    'Choose a store. CartCompare will search for '+what+' first, then automatically move to the next unchecked item in your list after you save. If a store has no suitable item, tap <b>Skip</b>.'+
+    '</div><div class="storechips">'+buttons+'</div>'
+  );
 }
 
-function openRetailer(store,itemId,itemName){
+function buildStoreQueue(store,startItemId){
+  let start=0;
+  if(startItemId){
+    const found=state.items.findIndex(i=>i.id===startItemId);
+    if(found>=0) start=found;
+  }
+
+  const items=state.items.slice(start);
+
+  return items
+    .filter((item,index)=>{
+      if(index===0 && startItemId) return true;
+      return !(item.quotes||[]).some(q=>q.store===store);
+    })
+    .map(item=>({
+      itemId:item.id,
+      itemName:item.name,
+      searchTerm:item.upc||item.name,
+      upc:item.upc||""
+    }));
+}
+
+function openRetailerSession(store,startItemId){
   closeModal();
-  if(window.Android && Android.openRetailer){
-    Android.openRetailer(store,STORES[store],itemId||"",itemName||"Price check");
+
+  let queue;
+  if(startItemId){
+    queue=buildStoreQueue(store,startItemId);
+  }else{
+    queue=state.items.map(item=>({
+      itemId:item.id,
+      itemName:item.name,
+      searchTerm:item.upc||item.name,
+      upc:item.upc||""
+    }));
+  }
+
+  if(!queue.length){
+    if(window.Android && Android.toast) Android.toast("No items left to check at "+store);
+    return;
+  }
+
+  if(window.Android && Android.openRetailerSession){
+    Android.openRetailerSession(store,STORES[store],JSON.stringify(queue));
+  }else if(window.Android && Android.openRetailer){
+    const first=queue[0];
+    Android.openRetailer(store,STORES[store],first.itemId,first.searchTerm);
   }
 }
 
@@ -190,18 +240,41 @@ function showModal(inner){
 }
 function closeModal(){const m=$("modal"); if(m) m.remove();}
 
-window.receiveRetailerQuote=function(q){
+function applyRetailerQuote(q){
   const item=itemById(q.itemId);
-  if(!item) return;
+  if(!item) return false;
+
   if(!Array.isArray(item.quotes)) item.quotes=[];
   item.quotes=item.quotes.filter(x=>!(x.store===q.store && x.brand===q.brand && x.product===q.product));
   item.quotes.push(q);
+
   if(item.upc && /^UPC\s+\d+$/i.test(item.name) && q.product){
     item.name=q.product;
   }
+
+  return true;
+}
+
+window.receiveRetailerQuote=function(q){
+  if(applyRetailerQuote(q)){
+    saveState();
+    render();
+    if(window.Android && Android.toast) Android.toast("Saved "+q.store+" price");
+  }
+};
+
+window.receiveRetailerQuotes=function(quotes){
+  if(!Array.isArray(quotes)) return;
+
+  let saved=0;
+  quotes.forEach(q=>{if(applyRetailerQuote(q)) saved++;});
+
   saveState();
   render();
-  if(window.Android && Android.toast) Android.toast("Saved "+q.store+" price");
+
+  if(window.Android && Android.toast){
+    Android.toast(saved+" price"+(saved===1?"":"s")+" saved");
+  }
 };
 
 function renderCart(){
@@ -261,7 +334,7 @@ function renderTrip(){
 
 function renderStores(){
   $("storeButtons").innerHTML=Object.keys(STORES).map(store=>
-    '<div class="item"><div class="emoji">🏪</div><div class="grow"><b>'+esc(store)+'</b><div class="small">Open and sign in locally</div></div><button class="btn ghost" data-open-store="'+esc(store)+'">Open</button></div>'
+    '<div class="item"><div class="emoji">🏪</div><div class="grow"><b>'+esc(store)+'</b><div class="small">Work through your list in this store</div></div><button class="btn ghost" data-open-store="'+esc(store)+'">Start</button></div>'
   ).join("");
 }
 
@@ -319,8 +392,8 @@ document.addEventListener("click",function(e){
   const nav=e.target.closest("[data-nav]"); if(nav){go(nav.dataset.nav);return;}
   const check=e.target.closest("[data-check]"); if(check){openCheckModal(check.dataset.check);return;}
   const remove=e.target.closest("[data-remove]"); if(remove){removeItem(remove.dataset.remove);return;}
-  const open=e.target.closest("[data-open-store]"); if(open){openRetailer(open.dataset.openStore,"","Price check");return;}
-  const store=e.target.closest("[data-store]"); if(store){openRetailer(store.dataset.store,store.dataset.item,store.dataset.search||"Price check");return;}
+  const open=e.target.closest("[data-open-store]"); if(open){openRetailerSession(open.dataset.openStore,"");return;}
+  const store=e.target.closest("[data-store]"); if(store){openRetailerSession(store.dataset.store,store.dataset.item);return;}
   if(e.target.id==="closeModalBtn"){closeModal();return;}
   if(e.target.id==="printBtn"){printList();return;}
   if(e.target.id==="csvBtn"){exportCsv();return;}
