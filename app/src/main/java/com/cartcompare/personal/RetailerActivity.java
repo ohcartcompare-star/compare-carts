@@ -92,7 +92,11 @@ public class RetailerActivity extends Activity {
         back.setOnClickListener(v->{ if(webView.canGoBack()) webView.goBack(); else finish(); });
         searchButton.setOnClickListener(v -> {
             String q=searchBox.getText().toString().trim();
-            if(!q.isEmpty()) webView.loadUrl(buildSearchUrl(store,q));
+            if(!q.isEmpty()) {
+                searchButton.setText("Loading…");
+                webView.loadUrl(buildSearchUrl(store,q));
+                webView.postDelayed(() -> searchButton.setText("Search"), 1500);
+            }
         });
         searchBox.setOnEditorActionListener((v, actionId, event) -> {
             String q=searchBox.getText().toString().trim();
@@ -119,13 +123,13 @@ public class RetailerActivity extends Activity {
             case "Meijer":
                 return "https://www.meijer.com/shopping/search.html?text="+q;
             case "Aldi":
-                return "https://www.aldi.us/results?q="+q;
+                return "https://shop.aldi.us/store/aldi/s?k="+q;
             case "Giant Eagle":
                 return "https://www.gianteagle.com/grocery/search?q="+q;
             case "Costco":
-                return "https://www.costco.com/CatalogSearch?dept=All&keyword="+q;
+                return "https://sameday.costco.com/store/costco/s?k="+q;
             case "Sam’s Club":
-                return "https://www.samsclub.com/s/"+q;
+                return "https://www.samsclub.com/c/kp/"+q;
             case "BJ’s":
                 // BJ's search URL changes more often, so use its site search page.
                 return "https://www.bjs.com/search/?search="+q;
