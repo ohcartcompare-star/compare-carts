@@ -7,7 +7,7 @@
         android:usesCleartextTraffic="false"
         android:label="@string/app_name"
         android:icon="@drawable/cartcompare_icon"
-        android:theme="@style/AppTheme">
+        android:theme="@style/AppTheme">\n        <meta-data\n            android:name="com.google.mlkit.vision.DEPENDENCIES"\n            android:value="barcode_ui"/>
         <activity
             android:name=".RetailerActivity"
             android:screenOrientation="portrait"
