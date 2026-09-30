@@ -36,7 +36,7 @@ main{padding:15px 15px 100px}h1{font-size:27px;margin:4px 0 2px}.card{background
     <button class="btn outline" id="quickExportBtn">Export</button>
   </div>
   <div id="hero" class="hero"></div>
-  <div class="search"><input id="newItem" placeholder="Add an item…"><button class="btn" id="addItemBtn">Add</button></div>
+  <div class="search"><input id="newItem" placeholder="Add an item…"><button class="btn" id="addItemBtn">Add</button><button class="btn ghost" id="scanBtn">▦ Scan</button></div>
   <div id="cartItems" class="card"></div>
 </section>
 
@@ -126,6 +126,37 @@ function addItem(){
   render();
 }
 
+function scanBarcode(){
+  if(window.Android && Android.scanBarcode){
+    Android.scanBarcode();
+  }else if(window.Android && Android.toast){
+    Android.toast("Barcode scanner is not available in this build.");
+  }
+}
+
+window.receiveBarcode=function(code){
+  code=String(code||"").replace(/\D/g,"").trim();
+  if(!code) return;
+  let existing=state.items.find(i=>i.upc===code);
+  if(existing){
+    openCheckModal(existing.id);
+    if(window.Android && Android.toast) Android.toast("Barcode already on your list");
+    return;
+  }
+  const item={
+    id:"upc-"+code+"-"+Date.now(),
+    name:"UPC "+code,
+    upc:code,
+    qty:"1",
+    emoji:"▦",
+    quotes:[]
+  };
+  state.items.unshift(item);
+  saveState();
+  render();
+  openCheckModal(item.id);
+};
+
 function removeItem(id){
   state.items=state.items.filter(x=>x.id!==id);
   saveState();
@@ -135,10 +166,12 @@ function removeItem(id){
 function openCheckModal(id){
   const item=itemById(id);
   if(!item) return;
+  const term=item.upc||item.name;
   const buttons=Object.keys(STORES).map(store=>
-    '<button class="storechip" data-store="'+esc(store)+'" data-item="'+esc(id)+'">'+esc(store)+'</button>'
+    '<button class="storechip" data-store="'+esc(store)+'" data-item="'+esc(id)+'" data-search="'+esc(term)+'">'+esc(store)+'</button>'
   ).join("");
-  showModal('<b>Check '+esc(item.name)+'</b><div class="small" style="margin:6px 0">Choose a store. CartCompare will search for <b>'+esc(item.name)+'</b> automatically.</div><div class="storechips">'+buttons+'</div>');
+  const what=item.upc ? 'barcode <b>'+esc(item.upc)+'</b>' : '<b>'+esc(item.name)+'</b>';
+  showModal('<b>Check '+esc(item.name)+'</b><div class="small" style="margin:6px 0">Choose a store. CartCompare will search that retailer for '+what+'. If a retailer does not index the UPC, you can change the search to the product name.</div><div class="storechips">'+buttons+'</div>');
 }
 
 function openRetailer(store,itemId,itemName){
@@ -163,6 +196,9 @@ window.receiveRetailerQuote=function(q){
   if(!Array.isArray(item.quotes)) item.quotes=[];
   item.quotes=item.quotes.filter(x=>!(x.store===q.store && x.brand===q.brand && x.product===q.product));
   item.quotes.push(q);
+  if(item.upc && /^UPC\s+\d+$/i.test(item.name) && q.product){
+    item.name=q.product;
+  }
   saveState();
   render();
   if(window.Android && Android.toast) Android.toast("Saved "+q.store+" price");
@@ -175,7 +211,7 @@ function renderCart(){
 
   $("cartItems").innerHTML=state.items.length ? state.items.map(i=>{
     const b=bestQuote(i);
-    return '<div class="item"><div class="emoji">'+i.emoji+'</div><div class="grow"><b>'+esc(i.name)+'</b><div class="small">'+esc(i.qty)+(b?' · '+esc(b.brand||"Unbranded")+' · '+esc(b.store):' · no saved price yet')+'</div><button class="link" data-check="'+esc(i.id)+'">Check price ↗</button></div><div style="text-align:right">'+(b?'<div class="price best">'+money(b.price)+'</div>':'')+'<button class="link danger" data-remove="'+esc(i.id)+'">Remove</button></div></div>';
+    return '<div class="item"><div class="emoji">'+i.emoji+'</div><div class="grow"><b>'+esc(i.name)+'</b><div class="small">'+esc(i.qty)+(i.upc?' · UPC '+esc(i.upc):'')+(b?' · '+esc(b.brand||"Unbranded")+' · '+esc(b.store):' · no saved price yet')+'</div><button class="link" data-check="'+esc(i.id)+'">Check price ↗</button></div><div style="text-align:right">'+(b?'<div class="price best">'+money(b.price)+'</div>':'')+'<button class="link danger" data-remove="'+esc(i.id)+'">Remove</button></div></div>';
   }).join("") : '<div class="small">Your list is empty.</div>';
 }
 
@@ -250,11 +286,11 @@ function printList(){
 
 function buildCsv(){
   const t=tripData();
-  const rows=[["Store","Item","Brand","Product","Package Size","Requested Quantity","Saved Price","Note"]];
+  const rows=[["Store","Item","UPC","Brand","Product","Package Size","Requested Quantity","Saved Price","Note"]];
   Object.entries(t.groups).forEach(([store,items])=>{
-    items.forEach(x=>rows.push([store,x.i.name,x.q.brand||"Unbranded",x.q.product||x.i.name,x.q.size||"",x.i.qty,Number(x.q.price||0).toFixed(2),x.q.note||""]));
+    items.forEach(x=>rows.push([store,x.i.name,x.i.upc||"",x.q.brand||"Unbranded",x.q.product||x.i.name,x.q.size||"",x.i.qty,Number(x.q.price||0).toFixed(2),x.q.note||""]));
   });
-  t.unpriced.forEach(i=>rows.push(["Unpriced",i.name,"","","",i.qty,"",""]));
+  t.unpriced.forEach(i=>rows.push(["Unpriced",i.name,i.upc||"","","","",i.qty,"",""]));
   return rows.map(r=>r.map(csvCell).join(",")).join("\r\n");
 }
 
@@ -284,7 +320,7 @@ document.addEventListener("click",function(e){
   const check=e.target.closest("[data-check]"); if(check){openCheckModal(check.dataset.check);return;}
   const remove=e.target.closest("[data-remove]"); if(remove){removeItem(remove.dataset.remove);return;}
   const open=e.target.closest("[data-open-store]"); if(open){openRetailer(open.dataset.openStore,"","Price check");return;}
-  const store=e.target.closest("[data-store]"); if(store){const item=itemById(store.dataset.item);openRetailer(store.dataset.store,store.dataset.item,item?item.name:"Price check");return;}
+  const store=e.target.closest("[data-store]"); if(store){openRetailer(store.dataset.store,store.dataset.item,store.dataset.search||"Price check");return;}
   if(e.target.id==="closeModalBtn"){closeModal();return;}
   if(e.target.id==="printBtn"){printList();return;}
   if(e.target.id==="csvBtn"){exportCsv();return;}
@@ -292,6 +328,7 @@ document.addEventListener("click",function(e){
 });
 
 $("addItemBtn").addEventListener("click",addItem);
+$("scanBtn").addEventListener("click",scanBarcode);
 $("newItem").addEventListener("keydown",e=>{if(e.key==="Enter") addItem();});
 $("quickExportBtn").addEventListener("click",()=>go("trip"));
 
