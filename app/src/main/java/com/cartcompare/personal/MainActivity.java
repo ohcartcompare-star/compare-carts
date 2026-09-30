@@ -16,6 +16,12 @@ import android.widget.Toast;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
+import org.json.JSONObject;
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
+
 public class MainActivity extends Activity {
     private static final int RETAILER_REQUEST = 711;
     private static final int EXPORT_CSV_REQUEST = 712;
@@ -67,6 +73,33 @@ public class MainActivity extends Activity {
                 PrintManager pm = (PrintManager)getSystemService(Context.PRINT_SERVICE);
                 if (pm != null) pm.print("CartCompare Shopping List",
                     webView.createPrintDocumentAdapter("CartCompare Shopping List"), null);
+            });
+        }
+
+        @JavascriptInterface public void scanBarcode() {
+            runOnUiThread(() -> {
+                GmsBarcodeScannerOptions options = new GmsBarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(
+                        Barcode.FORMAT_UPC_A,
+                        Barcode.FORMAT_UPC_E,
+                        Barcode.FORMAT_EAN_13,
+                        Barcode.FORMAT_EAN_8)
+                    .enableAutoZoom()
+                    .build();
+
+                GmsBarcodeScanner scanner = GmsBarcodeScanning.getClient(MainActivity.this, options);
+                scanner.startScan()
+                    .addOnSuccessListener(barcode -> {
+                        String raw = barcode.getRawValue();
+                        if (raw != null && !raw.trim().isEmpty()) {
+                            webView.evaluateJavascript("window.receiveBarcode(" + JSONObject.quote(raw.trim()) + ");", null);
+                        } else {
+                            Toast.makeText(MainActivity.this, "No barcode value found", Toast.LENGTH_SHORT).show();
+                        }
+                    })
+                    .addOnCanceledListener(() -> {})
+                    .addOnFailureListener(e -> Toast.makeText(MainActivity.this,
+                        "Barcode scanner could not start. Try again in a moment.", Toast.LENGTH_LONG).show());
             });
         }
 
